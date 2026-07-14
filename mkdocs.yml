@@ -1,0 +1,61 @@
+site_name: 实验室服务器知识库
+site_description: 实验室服务器使用、开发与运维文档
+site_url: https://shihuaidexianyu.github.io/lserver/
+repo_url: https://github.com/shihuaidexianyu/lserver
+repo_name: shihuaidexianyu/lserver
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  language: zh
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - search.highlight
+    - search.suggest
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: 切换至深色模式
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: 切换至浅色模式
+
+nav:
+  - 首页：集群概览: index.md
+  - 阶段一：新手上路:
+      - 终端工具准备: 终端.md
+      - 配置公钥与 SSH 别名: ssh登录.md
+      - 使用 VS Code 远程开发: vscode连接.md
+  - 阶段二：日常开发与数据管理:
+      - 存储空间布局与数据传输: 大容量存储.md
+      - Linux 权限与文件所有权: 文件所有权转移.md
+      - Python/R 环境管理: conda环境.md
+      - 公共脑影像软件调用: 软件安装.md
+  - 阶段三：网络访问与 AI 工具:
+      - 校内网认证: 一般网络连接.md
+      - 科学上网与代理开关: 代理网络连接.md
+      - AI CLI 工具配置规范: AI使用.md
+  - 阶段四：异常处理与底层机制:
+      - 内存、磁盘、网络故障排查: 异常处理.md
+      - 机制深挖：全局 Bash 继承: bash继承.md
+  - 阶段五：管理员专区:
+      - 基于 userkit 的账户运维: 服务器管理.md
+      - ufw 防火墙规则控制: 防火墙.md
+      - IPMI 硬件控制与远程开机: BMC.md
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
