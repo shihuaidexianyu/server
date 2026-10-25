@@ -32,6 +32,7 @@ theme:
 nav:
   - 首页：集群概览: index.md
   - 阶段一：新手上路:
+      - 15 分钟快速开始: 快速开始.md
       - 终端工具准备: 终端.md
       - 配置公钥与 SSH 别名: ssh登录.md
       - 使用 VS Code 远程开发: vscode连接.md
@@ -39,7 +40,7 @@ nav:
       - 存储空间布局与数据传输: 大容量存储.md
       - Linux 权限与文件所有权: 文件所有权转移.md
       - Python/R 环境管理: conda环境.md
-      - 公共脑影像软件调用: 软件安装.md
+      - 公共脑影像软件使用: 软件安装.md
   - 阶段三：网络访问与 AI 工具:
       - 校内网认证: 一般网络连接.md
       - 科学上网与代理开关: 代理网络连接.md
@@ -51,6 +52,7 @@ nav:
       - 基于 userkit 的账户运维: 服务器管理.md
       - ufw 防火墙规则控制: 防火墙.md
       - IPMI 硬件控制与远程开机: BMC.md
+      - 文档维护与信息边界: 文档维护.md
 
 markdown_extensions:
   - admonition

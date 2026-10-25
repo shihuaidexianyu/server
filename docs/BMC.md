@@ -2,6 +2,13 @@
 
 BMC 是服务器的板载管理控制器，可用于查看硬件状态、远程开关机、进入远程控制台等。BMC 通常独立于操作系统运行，即使 Ubuntu 无响应，也可能通过 BMC 查看机器状态或进行电源操作。
 
+> **【警告】管理员专用**
+>
+> - **适用对象**：获得明确授权的服务器管理员。
+> - **前置条件**：从私有清单获取 BMC 地址和账号，并确认当前机器与正在运行的任务。
+> - **所需权限**：BMC 专用凭据；不得使用普通用户共享账号。
+> - **完成标准**：能够只读查看电源和传感器状态；任何关机、重启或远程控制操作都必须经过影响确认。
+
 ## BMC 地址信息
 
 服务器主机名、管理 IP、BMC IP 和访问地址属于内部运维信息，不在公开文档中记录。管理员应在本地私有清单中维护这些映射。
@@ -17,7 +24,7 @@ BMC 常用于：
 - 远程开机、关机、重启。
 - 查看硬件告警。
 - 使用远程控制台排查系统无法启动的问题。
-- 检查 RAID、磁盘或硬件异常。
+- 查看平台支持的硬件告警；RAID/磁盘详情可能需要厂商专用工具，不能保证通用 IPMI 传感器覆盖。
 
 ## 登录方式
 
@@ -33,22 +40,16 @@ https://<bmc_ip>
 
 如果本机或服务器安装了 `ipmitool`，可以通过命令行查看状态。以下命令中的地址和 `<bmc_username>` 需要替换为实际值。
 
-为避免密码进入 shell 历史，可以交互式读取密码：
+使用 `-a` 让 ipmitool 自己交互读取密码，不在命令行参数或导出的环境变量中长期保存：
 
 ```bash
-read -rsp "BMC password: " IPMI_PASSWORD
-export IPMI_PASSWORD
-ipmitool -I lanplus -H <bmc_ip> -U <bmc_username> -E power status
-unset IPMI_PASSWORD
+ipmitool -I lanplus -H <bmc_ip> -U <bmc_username> -a power status
 ```
 
 查看传感器：
 
 ```bash
-read -rsp "BMC password: " IPMI_PASSWORD
-export IPMI_PASSWORD
-ipmitool -I lanplus -H <bmc_ip> -U <bmc_username> -E sensor
-unset IPMI_PASSWORD
+ipmitool -I lanplus -H <bmc_ip> -U <bmc_username> -a sensor
 ```
 
 不建议在 shell 历史、脚本或共享文档中留下 BMC 密码。
@@ -57,9 +58,9 @@ unset IPMI_PASSWORD
 
 ## 电源操作
 
-!!! warning "强制断电风险"
-
-    `power off` 和 `power cycle` 相当于拔掉物理电源线。非系统完全死锁且征得所有正在运行任务成员同意，严禁执行此操作。
+> **【警告】强制断电风险**
+>
+> `power off` 会强制关闭主机系统电源，`power cycle` 会关闭后重新开启，可能丢失未落盘数据；BMC 的待机电源通常仍在，二者不等同拔掉整台机器的电源线。非系统完全死锁且征得所有正在运行任务成员同意，严禁执行此操作。
 
 电源操作影响所有用户，必须谨慎。执行前应确认：
 
@@ -68,16 +69,17 @@ unset IPMI_PASSWORD
 - 是否有其它恢复方式。
 - 是否已经通知相关用户。
 
-常见操作包括：
+逐次选择经过确认的一个动作，不要把多个电源操作连在一起粘贴运行：
+
+| `power` 后的动作 | 含义 |
+| --- | --- |
+| `status` | 查询电源状态 |
+| `on` | 开机 |
+| `off` | 强制关闭系统电源 |
+| `cycle` | 关闭再开启系统电源 |
 
 ```bash
-read -rsp "BMC password: " IPMI_PASSWORD
-export IPMI_PASSWORD
-ipmitool -I lanplus -H <bmc_ip> -U <bmc_username> -E power status
-ipmitool -I lanplus -H <bmc_ip> -U <bmc_username> -E power on
-ipmitool -I lanplus -H <bmc_ip> -U <bmc_username> -E power off
-ipmitool -I lanplus -H <bmc_ip> -U <bmc_username> -E power cycle
-unset IPMI_PASSWORD
+ipmitool -I lanplus -H <bmc_ip> -U <bmc_username> -a power <approved_action>
 ```
 
 其中 `power off` 和 `power cycle` 都可能导致数据丢失。只有在系统无法正常恢复时才使用。
@@ -92,7 +94,7 @@ unset IPMI_PASSWORD
 4. 如果还能进入远程控制台，优先尝试正常重启。
 5. 只有在必要时才执行强制电源操作。
 
-异常处理参见 [异常处理.md](异常处理.md)。
+异常处理参见 [异常处理](异常处理.md)。
 
 ## 安全要求
 
@@ -100,3 +102,7 @@ unset IPMI_PASSWORD
 - BMC 密码不能写入共享文档、脚本或聊天记录。
 - 离组人员应及时移除 BMC 访问权限。
 - 电源操作应记录时间、原因和执行人。
+
+浏览器的证书和控制台能力依 BMC 固件而定；异常证书先按管理员私有清单核对，不盲目忽略。IPMI-over-LAN 必须由管理员确认已启用；`lanplus` 认证/加密套件的默认值随 ipmitool 版本变化，连接失败不能直接降级为不安全套件。
+
+依据：[ipmitool 官方手册源码](https://github.com/ipmitool/ipmitool/blob/master/doc/ipmitool.1.in) 的密码、lanplus 与 chassis power 选项。具体操作还需结合目标机型的 BMC 手册与固件版本。

@@ -2,6 +2,13 @@
 
 Conda 用于管理 Python、R、命令行工具及其依赖。服务器上建议每个用户把 Conda 安装在自己的用户目录下，并为不同项目创建独立环境，避免互相影响。
 
+> **【说明】适用对象与完成标准**
+>
+> - **适用对象**：需要 Python、R 或项目私有命令行依赖的普通用户。
+> - **前置条件**：SSH 登录正常，并能访问安装源；需要时先配置网络或代理。
+> - **所需权限**：只使用个人用户权限，禁止使用 `sudo` 安装个人 Conda。
+> - **完成标准**：`conda info --base` 指向个人安装目录，项目环境能激活，`which python` 和 `python --version` 符合预期。
+
 ## 安装位置
 
 推荐安装到用户目录，例如：
@@ -20,7 +27,7 @@ Conda 用于管理 Python、R、命令行工具及其依赖。服务器上建议
 pon
 ```
 
-网络说明参见 [代理网络连接.md](代理网络连接.md)。
+网络说明参见 [代理网络连接](代理网络连接.md)。
 
 ## 安装 Miniconda
 
@@ -37,13 +44,13 @@ https://www.anaconda.com/docs/getting-started/miniconda/install/linux-install
 进入一个临时目录：
 
 ```bash
-cd /tmp
+conda_download_dir=$(mktemp -d) && cd "$conda_download_dir"
 ```
 
 使用 `curl` 下载最新版安装脚本：
 
 ```bash
-curl -O https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+curl -fLO https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
 ```
 
 如果没有 `curl`，可以使用 `wget`：
@@ -52,7 +59,7 @@ curl -O https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
 wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
 ```
 
-可选但推荐：计算安装脚本的 SHA-256，并到官方仓库页面核对：
+运行前计算安装脚本的 SHA-256，并到官方仓库页面核对；校验不一致或下载失败时不要运行：
 
 ```bash
 sha256sum Miniconda3-latest-Linux-x86_64.sh
@@ -64,7 +71,7 @@ sha256sum Miniconda3-latest-Linux-x86_64.sh
 https://repo.anaconda.com/miniconda/
 ```
 
-运行安装脚本：
+`latest` URL 会变化。实验记录应保留下载日期、SHA-256 和实际安装版本；需要固定版本时从官方清单选择版本化文件名。确认 `uname -m` 为 `x86_64` 后，再运行对应安装脚本：
 
 ```bash
 bash Miniconda3-latest-Linux-x86_64.sh
@@ -73,7 +80,7 @@ bash Miniconda3-latest-Linux-x86_64.sh
 安装过程中按提示操作：
 
 1. 阅读许可协议，输入 `yes` 接受。
-2. 安装路径建议使用默认的 `~/miniconda3`。
+2. 安装路径建议使用 `~/miniconda3`；若目录已经存在，先确认它是否是正在使用的安装，不覆盖。
 3. 询问是否初始化 conda 时，建议输入 `yes`，让安装器自动修改 `~/.bashrc`。
 
 如果你不想交互式安装，也可以明确指定安装目录：
@@ -94,7 +101,8 @@ source ~/.bashrc
 ```bash
 conda --version
 conda list
-which conda
+type -a conda
+conda info --base
 ```
 
 如果安装前开启了代理，安装完成后可以关闭：
@@ -121,7 +129,7 @@ source ~/.bashrc
 
 ```bash
 conda --version
-which conda
+type -a conda
 ```
 
 ## 创建环境
@@ -129,7 +137,7 @@ which conda
 为每个项目创建独立环境：
 
 ```bash
-conda create -n project_name python=3.11
+conda create -n project_name python=3.11 pip
 conda activate project_name
 ```
 
@@ -137,10 +145,10 @@ conda activate project_name
 
 ```bash
 conda install numpy scipy pandas
-pip install package_name
+python -m pip install package_name
 ```
 
-原则上优先用 `conda install` 安装二进制依赖复杂的包，再用 `pip` 补充 Conda 中没有的包。
+Python 3.11 只是示例，应按项目约束选择。先用 Conda 解决尽可能多的依赖，再用当前环境的 `python -m pip` 补充；需要继续变更 Conda 依赖时，优先按声明文件重建新环境，避免覆盖 pip 已改动的依赖。
 
 ## 查看和删除环境
 
@@ -153,14 +161,15 @@ conda env list
 删除不再使用的环境：
 
 ```bash
-conda env remove -n 环境名
+conda deactivate
+conda env remove -n <env_name>
 ```
 
 删除前确认没有项目仍依赖该环境。
 
 ## 导出环境
 
-为了保证实验可重复，建议导出环境文件：
+导出实际环境有助于复现，但不保证跨平台或未来解析得到完全相同的包；记录 Conda 版本、渠道和目标平台，并先确认不会覆盖已有 `environment.yml`：
 
 ```bash
 conda env export > environment.yml
@@ -172,7 +181,7 @@ conda env export > environment.yml
 conda env create -f environment.yml
 ```
 
-如果只想记录手动安装的包，可以使用：
+如果只想记录显式请求的 Conda 依赖，可以使用（不等于完整冻结，也不能依此保全所有 pip 依赖）：
 
 ```bash
 conda env export --from-history > environment.yml
@@ -186,7 +195,7 @@ Conda 包缓存可能占用大量空间。查看缓存：
 conda clean --dry-run --all
 ```
 
-确认后清理：
+预览只列出将清理的内容，并不是缓存大小报告。确认后清理；环境若依赖包缓存中的符号链接，应特别检查，不要追加 `--force-pkgs-dirs`：
 
 ```bash
 conda clean --all
@@ -208,7 +217,7 @@ conda clean --all
 检查是否初始化：
 
 ```bash
-which conda
+type -a conda
 echo "$PATH"
 ```
 
@@ -225,7 +234,7 @@ source ~/miniconda3/etc/profile.d/conda.sh
 可能是网络问题。先确认是否需要代理：
 
 ```bash
-curl ipinfo.io
+curl -I --max-time 10 https://repo.anaconda.com/miniconda/
 ```
 
 再根据需要执行：
@@ -245,3 +254,7 @@ conda info --envs
 ```
 
 确认当前环境名前面是否有 `*`。
+
+初始化后 `conda` 常是 shell 函数，`which conda` 不足以判断实际安装；可用 `type -a conda` 和 `conda info --base`。项目中可用 `python -c "import sys; print(sys.executable)"` 核对解释器。
+
+依据：[Miniconda Linux 安装](https://www.anaconda.com/docs/getting-started/miniconda/install/linux-install)、[Conda 环境管理](https://docs.conda.io/projects/conda/en/stable/user-guide/tasks/manage-environments.html)、[Conda clean](https://docs.conda.io/projects/conda/en/latest/commands/clean.html)。兼容性和新导出选项依 Conda 版本变化。

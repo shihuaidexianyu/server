@@ -1,137 +1,64 @@
-# Bash 继承
+# Bash 启动与环境继承
 
-服务器上部分特殊 Bash 命令通过全局 Bash 配置继承到各个用户，例如 `pon` 和 `poff`。默认假设用户使用 Bash 作为 shell，尚未在 Zsh、Fish 等其它 shell 中完整测试。
+先区分“启动文件加载函数”和“子进程继承环境”，再定位 `pon`、`poff` 为什么可用或缺失。以下以函数写在 Ubuntu 全局 Bash 配置中为例；实际函数定义与加载位置取决于部署配置。
 
-本文是进阶原理页，不是普通用户的第一入口。普通用户只需要知道如何开启或关闭代理时，应先阅读 [代理网络连接](代理网络连接.md)；只有遇到 `pon`、`poff` 不存在、登录 shell 行为异常、VS Code 远程终端不加载函数等问题时，再阅读本文。
+普通用户先看 [代理网络连接](代理网络连接.md)。本页供排查 shell、SSH、VS Code 与批处理环境的用户和管理员使用；修改系统文件仅限管理员，并须保留另一个可用会话和恢复副本。
 
-## 全局配置位置
-
-Ubuntu 的全局 Bash 配置通常位于：
-
-```text
-/etc/bash.bashrc
-```
-
-写入该文件的函数、别名和环境变量，会影响交互式 Bash 用户。
-
-查看文件：
+## 当前 shell 与启动方式
 
 ```bash
-sudo less /etc/bash.bashrc
+printf '账户默认 shell: %s\n' "$SHELL"
+ps -p $$ -o comm=
+printf '当前参数标志: %s\n' "$-"
+shopt -q login_shell && printf 'login shell\n'
+type -t pon
+type -t poff
 ```
 
-编辑前建议备份：
+`$SHELL` 通常是账户默认 shell，不一定是正在执行命令的 shell；`$-` 含 `i` 才表示交互式 Bash。`shopt` 是 Bash 专属内建命令，先确认当前进程是 Bash。`type -t` 只显示命令类型，避免把函数内的私有代理地址输出到共享日志。
+
+## 启动文件不是全部依次读取
+
+| Bash 启动方式 | 主要读取规则 |
+| --- | --- |
+| 登录 shell | `/etc/profile`，再从 `~/.bash_profile`、`~/.bash_login`、`~/.profile` 中按顺序读第一个存在且可读的文件 |
+| 交互、非登录 shell | 上游 Bash 读 `~/.bashrc`；Ubuntu 的系统版还使用 `/etc/bash.bashrc`，受 `--norc` 等选项影响 |
+| 普通非交互脚本 | 通常不读交互 rc，按 `BASH_ENV` 指定的文件加载；带 `--login` 时又有登录规则 |
+| sshd 启动的非交互 Bash | Bash 识别远程启动时可能读 `~/.bashrc`；以 `sh` 启动、文件中的提前 return 或其它启动条件会改变结果 |
+
+Ubuntu 的 `/etc/profile` 可以再加载系统 Bash 配置和 `/etc/profile.d/*.sh`；`profile.d` 并非 Bash 无条件扫描的内建机制。新建 `~/.bash_profile` 也可能使旧 `~/.profile` 不再被读取。应检查目标机器的实际文件和加载顺序，不要把一个文件写入成功等同所有终端都已生效。
+
+## 环境变量与函数的区别
+
+`pon` 在当前 Bash 执行 `export http_proxy=...` 等操作后，随后启动的程序继承这些导出变量。已经运行的终端或程序不受影响；子进程修改变量也不会反向修改父 shell。
+
+Bash 函数本身默认不会传给新启动的 `bash script.sh`；`export -f` 是另一种机制，且不能据此假定 Zsh、Fish 或 `/bin/sh` 认识函数。需要代理的脚本通常只需继承导出的变量，不必获得 `pon` 定义。
 
 ```bash
-sudo cp /etc/bash.bashrc /etc/bash.bashrc.bak.$(date +%Y%m%d)
+# 在已经加载 pon 的交互 Bash 中启动任务
+(pon && bash run_download.sh)
 ```
 
-## pon 和 poff 的原理
+括号创建子 shell，代理变量只在该子 shell 及其后代中改变，任务结束后父 shell 保持原值。需要脚本自主加载环境时，应显式加载管理员提供的可信、轻量脚本，而不是无条件 source 整份交互 `~/.bashrc`。
 
-`pon` 和 `poff` 本质上是 Bash 函数：
+## 管理员维护原则
 
-- `pon` 设置代理相关环境变量。
-- `poff` 取消代理相关环境变量。
-
-它们只影响当前 shell 以及从当前 shell 启动的子进程，不会自动影响已经运行的其它终端。
-
-代理网络说明参见 [代理网络连接.md](代理网络连接.md)。
-
-## 查看函数是否存在
-
-登录服务器后执行：
+`/etc/bash.bashrc` 通常可由普通用户读取；需要修改时才使用管理员权限。修改前备份文件，保留精确路径、时间和恢复方式；同一天的备份也不要互相覆盖。
 
 ```bash
-type pon
-type poff
+less /etc/bash.bashrc
+bash -n /etc/bash.bashrc
 ```
 
-如果输出显示 `pon is a function`，说明当前 shell 已经加载函数。
+`bash -n` 只检查语法，不执行配置，不验证路径、命令、权限或行为。全局启动配置应安静且轻量，不默认激活个人 Conda、不改变别人私有路径、不存放凭据。交互提示只应在交互场景输出，环境设置与输出逻辑应分开。
 
-也可以检查当前 shell：
+修改后保留原管理员会话，新开 SSH 和 VS Code 终端分别检查函数类型、shell 标志和程序路径；再按实际使用方式验证非交互命令、SFTP/scp/rsync，避免启动输出污染协议。不要为测试加载真实代理而把其值写入公开日志。
 
-```bash
-echo "$SHELL"
-echo "$0"
-```
+## 常见排查
 
-## 修改全局 Bash 配置的注意事项
+- **函数不存在**：检查部署是否存在、当前 shell 与加载方式；不是一概归因于没有“继承”。
+- **登录慢或有额外输出**：检查启动文件中的联网、耗时操作和调试打印。
+- **交互终端可用，脚本不可用**：检查脚本的解释器、是否需要函数，或只需父 shell 预先导出变量。
+- **VS Code 环境不同**：记录 Remote SSH 日志与实际 shell，不盲目把所有配置 source 到所有启动路径。
 
-全局 Bash 配置影响所有用户，因此要保持轻量、安静、可预测：
-
-- 不要在登录时输出大段文字。
-- 不要执行耗时命令。
-- 不要自动激活某个 Conda 环境。
-- 不要修改用户私有配置。
-- 不要在全局配置中写入 token、密码或私有代理订阅。
-- 不要假设所有用户目录结构完全相同。
-
-如果需要复杂逻辑，建议在 `/etc/profile.d/` 或独立脚本中维护，然后在 Bash 配置中按需加载。
-
-## 修改后的测试
-
-修改 `/etc/bash.bashrc` 后，先开一个新的 SSH 会话测试，不要关闭当前管理员会话。
-
-检查：
-
-```bash
-ssh <server_alias>
-type pon
-type poff
-echo "$SHELL"
-```
-
-测试代理函数：
-
-```bash
-pon
-env | grep -i proxy
-poff
-env | grep -i proxy
-```
-
-确认不会影响普通命令：
-
-```bash
-ls
-pwd
-conda --version
-```
-
-## 用户自己的 Bash 配置
-
-用户个人配置通常在：
-
-```text
-~/.bashrc
-~/.bash_profile
-~/.profile
-```
-
-用户可以在自己的 `~/.bashrc` 中设置个人别名、Conda 初始化、项目路径等。但不要把只适合个人的配置写入全局文件。
-
-## 常见问题
-
-### pon 命令不存在
-
-可能原因：
-
-- 当前 shell 不是 Bash。
-- `/etc/bash.bashrc` 没有被加载。
-- 函数定义写入位置不对。
-- VS Code Remote SSH 使用的启动方式没有加载交互式 Bash。
-
-先检查：
-
-```bash
-echo "$SHELL"
-type pon
-```
-
-### 登录时出现奇怪输出
-
-可能是全局 Bash 配置中有 `echo`、调试输出或命令报错。需要清理这些输出，因为它们可能影响 VS Code、scp、rsync 等工具。
-
-### 非交互脚本中函数不可用
-
-非交互脚本不一定加载 `/etc/bash.bashrc`。如果脚本依赖 `pon`，应显式说明需要在交互 shell 中先开启代理，或者在脚本中明确加载必要配置。
+依据：[GNU Bash 启动文件](https://www.gnu.org/software/bash/manual/html_node/Bash-Startup-Files.html)、[Bash 手册中的环境与函数](https://www.gnu.org/s/bash/manual/bash.html)、[Ubuntu 22.04 Bash 手册](https://manpages.ubuntu.com/manpages/jammy/man1/bash.1.html)。

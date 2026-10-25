@@ -1,10 +1,17 @@
 # AI 使用
 
-服务器上可以安装 Codex、Claude Code 等 AI CLI 工具。此类工具通常依赖 Node.js、网络代理和个人 API token。使用时应注意环境隔离、网络配置和密钥安全。
+服务器上可以安装 Codex、Claude Code 等 AI CLI 工具。依赖和认证方式随工具、安装方式与版本变化：Codex 和 Claude Code 都提供独立/原生安装方式，不能把 Node.js、代理或 API token 当作共同必需条件。使用时应注意环境隔离、网络配置和密钥安全。
+
+> **【说明】适用对象与完成标准**
+>
+> - **适用对象**：需要在服务器上使用个人 AI CLI 工具的普通用户。
+> - **前置条件**：基础网络和代理配置正常，并拥有个人合法账号或 token。
+> - **所需权限**：只安装到个人目录，不需要也不应使用 `sudo npm install -g` 修改系统环境。
+> - **完成标准**：目标 CLI 能输出版本（选 npm 安装时再检查 Node.js/npm），登录或 token 配置仅对当前用户可见，并能在 `tmux` 中完成一次测试调用。
 
 ## 基本依赖
 
-多数 AI CLI 工具需要 Node.js 运行时。推荐使用 `nvm` 安装 Node.js，而不是修改系统 Node.js。
+先读目标工具的官方安装说明。选择 npm 发行方式或项目本身需要 Node.js 时，才使用个人 `nvm` 管理 Node.js；独立安装器不需要先完成整套 nvm 流程。
 
 推荐安装到用户自己的目录中：
 
@@ -24,7 +31,7 @@
 https://github.com/nvm-sh/nvm
 ```
 
-以下命令按 nvm 官方 README 当前安装脚本版本 `v0.40.5` 整理。后续如果版本更新，可以到官方仓库确认最新版本号。
+以下命令以 nvm 安装脚本版本 `v0.40.8` 为例；其他版本的安装方式与要求应以官方仓库为准。
 
 如果访问 GitHub 需要代理，先开启代理：
 
@@ -32,16 +39,23 @@ https://github.com/nvm-sh/nvm
 pon
 ```
 
-使用 `curl` 安装：
+先下载到自己的临时目录，避免覆盖已有安装脚本：
 
 ```bash
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.5/install.sh | bash
+ai_download_dir=$(mktemp -d) && cd "$ai_download_dir"
+curl -fLo nvm-install-v0.40.8.sh https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh
 ```
 
 如果没有 `curl`，也可以使用 `wget`：
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.5/install.sh | bash
+wget -O nvm-install-v0.40.8.sh https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh
+```
+
+确认下载成功、查看脚本及其将修改的文件后，再单独执行下面一步。下载失败时不要执行，也不要改用目录里的旧脚本：
+
+```bash
+bash nvm-install-v0.40.8.sh
 ```
 
 安装脚本通常会把 nvm 下载到：
@@ -109,7 +123,7 @@ poff
 
 ## 安装 AI CLI 工具
 
-不同工具的安装命令不同，应以对应官方文档为准。一般形式类似：
+[Codex CLI 官方文档](https://learn.chatgpt.com/docs/codex/cli) 提供 macOS/Linux 独立安装器及其它发行方式；[Claude Code 官方安装](https://code.claude.com/docs/en/setup) 区分原生与 npm 方式，当前 npm 包要求 Node.js 22 或更高。安装前记录选用方式和版本，不以 `nvm install --lts` 的变化结果作为实验固定版本。选择 npm 方式时，一般形式类似：
 
 ```bash
 npm install -g <package_name>
@@ -123,7 +137,7 @@ npm install -g <package_name>
 poff
 ```
 
-代理说明参见 [代理网络连接.md](代理网络连接.md)。
+代理说明参见 [代理网络连接](代理网络连接.md)。
 
 ## Token 和密钥管理
 
@@ -134,17 +148,9 @@ AI CLI 通常需要登录或配置 API token。注意：
 - 不要把 token 贴到聊天记录或公共文档。
 - 如果怀疑泄露，立即撤销并重新生成。
 
-建议使用工具自带的登录流程，或把环境变量写入个人 shell 配置：
+优先按工具自带的登录流程配置认证，或从受控秘密管理工具临时注入所需环境变量；不要默认把长期 token 写入 `~/.bashrc`。文件权限限制也不能阻止该账户运行的程序读取秘密，导出变量会被子进程继承。
 
-```bash
-export EXAMPLE_API_KEY="只放在个人配置中"
-```
-
-如果写入 `~/.bashrc`，确认文件权限不对其他人开放：
-
-```bash
-chmod 600 ~/.bashrc
-```
+Codex 支持 ChatGPT 登录及 API key 等认证方式，功能和费用依认证方式与计划而定。无浏览器的服务器可按 [官方认证文档](https://learn.chatgpt.com/docs/auth) 使用 `codex login --device-auth`，前提是账户/工作区允许；不要分享一次性设备码。文件型凭据存储中的 `~/.codex/auth.json` 含敏感 token，应像密码一样保护，不读出或粘贴到日志。
 
 ## 使用代理
 
@@ -157,8 +163,8 @@ pon
 检查：
 
 ```bash
-env | grep -i proxy
-curl ipinfo.io
+env | cut -d= -f1 | grep -i proxy
+curl --max-time 10 https://ipinfo.io/ip
 ```
 
 使用完成后关闭：
@@ -181,7 +187,7 @@ tmux new -s ai
 tmux attach -t ai
 ```
 
-终端使用建议参见 [终端.md](终端.md)。
+终端使用建议参见 [终端](终端.md)。
 
 ## 使用规范
 
@@ -205,7 +211,7 @@ npm --version
 再检查网络：
 
 ```bash
-curl ipinfo.io
+curl --max-time 10 https://ipinfo.io/ip
 ```
 
 必要时开启代理：
@@ -237,9 +243,13 @@ which npm
 检查代理变量是否存在：
 
 ```bash
-env | grep -i proxy
+env | cut -d= -f1 | grep -i proxy
 ```
 
-如果 `curl` 能访问但 AI 工具不行，说明该工具可能需要单独配置代理，需查看对应官方文档。
+如果 curl 能访问而 AI 工具失败，还要比较目标主机、TLS、认证和程序自己的代理配置，不能直接确定是代理变量问题。
 
 如果 `pon` 或 `poff` 命令不存在，先阅读 [代理网络连接](代理网络连接.md) 的排查部分；如果问题仍然存在，再阅读 [Bash 继承](bash继承.md)。
+
+安装 nvm 前使用自己的下载目录并确认文件名不会覆盖原文件；其默认位置也可能受 `XDG_CONFIG_HOME` 影响，按安装输出核对 `NVM_DIR`。每次记录 `codex --version` 或 `claude --version`；最小调用应在临时项目中、按用户允许的账户范围进行。
+
+参考：[Codex CLI](https://learn.chatgpt.com/docs/codex/cli)、[Codex 认证](https://learn.chatgpt.com/docs/auth)、[nvm 官方 README](https://github.com/nvm-sh/nvm) 和 [Claude Code setup](https://code.claude.com/docs/en/setup)。
